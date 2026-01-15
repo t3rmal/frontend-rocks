@@ -1,182 +1,162 @@
 import { useEffect, useState } from "react";
 
-// Colori per tipo
-const typeColors: Record<string, string> = {
-  normal: "bg-gray-300",
-  fire: "bg-red-500",
-  water: "bg-blue-400",
-  electric: "bg-yellow-400",
-  grass: "bg-green-400",
-  ice: "bg-cyan-200",
-  fighting: "bg-red-700",
-  poison: "bg-purple-500",
-  ground: "bg-yellow-700",
-  flying: "bg-indigo-300",
-  psychic: "bg-pink-400",
-  bug: "bg-green-600",
-  rock: "bg-gray-500",
-  ghost: "bg-indigo-700",
-  dragon: "bg-purple-700",
-  dark: "bg-gray-800",
-  steel: "bg-gray-400",
-  fairy: "bg-pink-300",
-};
-
 type CardProps = {
-  name: string;
   id: number;
+  name: string;
   types: string[];
   img: string;
 };
 
 type PokemonDetailsType = {
-  name: string;
   id: number;
+  name: string;
   types: string[];
-  stats: { name: string; value: number }[];
   height: number;
   weight: number;
   abilities: string[];
+  stats: { name: string; value: number }[];
   img: string;
 };
 
 export const Root = () => {
   const [pokemons, setPokemons] = useState<CardProps[]>([]);
   const [selected, setSelected] = useState<PokemonDetailsType | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const fetchPokemons = async () => {
+    const fetchAll = async () => {
       try {
-        const res = await fetch("https://pokeapi.co/api/v2/pokemon?limit=151"); // primi 151
+        // 1. Fetch base di tutti i Pokémon
+        const res = await fetch("https://pokeapi.co/api/v2/pokemon?offset=0&limit=1025");
         const data = await res.json();
 
-        // Per ogni Pokémon fetchiamo i dettagli per prendere i tipi
-        const detailedPokemons = await Promise.all(
-          data.results.map(async (p: any, idx: number) => {
-            const id = idx + 1;
-            const detailRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
-            const detailData = await detailRes.json();
-            return {
-              name: p.name,
-              id,
-              types: detailData.types.map((t: any) => t.type.name),
-              img: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`,
-            };
+        const cards: CardProps[] = data.results.map((p: any, idx: number) => {
+          const id = idx + 1;
+          return {
+            id,
+            name: p.name,
+            types: [], // verrà aggiornato subito dopo
+            img: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`,
+          };
+        });
+
+        setPokemons(cards);
+
+        // 2. Fetch leggero solo per tipi
+        const updatedCards = await Promise.all(
+          cards.map(async (p) => {
+            try {
+              const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${p.id}`);
+              const data = await res.json();
+              return { ...p, types: data.types.map((t: any) => t.type.name) };
+            } catch {
+              return p;
+            }
           })
         );
 
-        setPokemons(detailedPokemons);
-        setLoading(false);
+        setPokemons(updatedCards);
       } catch (err) {
         console.error(err);
       }
     };
 
-    fetchPokemons();
+    fetchAll();
   }, []);
 
-  const openDetails = async (id: number) => {
+  // funzione click per aprire dettaglio completo
+  const handleClick = async (p: CardProps) => {
+    setLoading(true);
     try {
-      const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
+      const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${p.id}`);
       const data = await res.json();
 
-      setSelected({
-        name: data.name,
+      const details: PokemonDetailsType = {
         id: data.id,
+        name: data.name,
         types: data.types.map((t: any) => t.type.name),
-        stats: data.stats.map((s: any) => ({ name: s.stat.name, value: s.base_stat })),
         height: data.height,
         weight: data.weight,
         abilities: data.abilities.map((a: any) => a.ability.name),
+        stats: data.stats.map((s: any) => ({ name: s.stat.name, value: s.base_stat })),
         img: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${data.id}.png`,
-      });
+      };
+
+      setSelected(details);
     } catch (err) {
       console.error(err);
     }
+    setLoading(false);
   };
 
-  if (loading) return <div className="text-center mt-10">Caricamento Pokédex...</div>;
-
   return (
-    <div className="p-4 flex flex-wrap gap-4 justify-start">
-      {pokemons.map((p) => {
-        const mainType = p.types[0] || "normal";
-        const bgColor = typeColors[mainType] || "bg-gray-300";
-
-        return (
-          <div
-            key={p.id}
-            onClick={() => openDetails(p.id)}
-            className={`w-36 h-36 relative cursor-pointer transform transition hover:scale-105 hover:shadow-lg rounded-lg ${bgColor} flex flex-col items-center justify-center`}
-          >
-            {/* Nome + ID */}
-            <div className="absolute top-1 left-1 font-bold text-xs bg-white/80 px-1 py-0.5 rounded">
-              {p.name} - #{p.id}
-            </div>
-            {/* Tipo in basso a destra */}
-            <div className="absolute bottom-1 right-1 flex flex-col items-end gap-0.5">
-              {p.types.map((type) => (
-                <span
-                  key={type}
-                  className="bg-white/80 text-black text-[8px] px-1 py-0.5 rounded"
-                >
-                  {type}
-                </span>
-              ))}
-            </div>
-            <img src={p.img} alt={p.name} className="w-24 h-24 object-contain" />
+    <div className="p-4 flex flex-wrap gap-2 justify-start relative">
+      {pokemons.map((p) => (
+        <div
+          key={p.id}
+          className="w-24 h-24 relative cursor-pointer flex flex-col items-center justify-center bg-white border border-gray-200 rounded-lg hover:shadow-lg hover:scale-105 transform transition"
+          onClick={() => handleClick(p)}
+        >
+          {/* Nome + ID */}
+          <div className="absolute top-1 left-1 font-bold text-[8px] bg-white/80 px-1 py-0.5 rounded">
+            {p.name} - #{p.id}
           </div>
-        );
-      })}
 
-      {/* Modal dettagli */}
+          {/* Tipo in basso a destra */}
+          <div className="absolute bottom-1 right-1 flex flex-col items-end gap-0.5">
+            {p.types.length > 0 ? p.types.map((type) => (
+              <span key={type} className="bg-gray-200 text-black text-[6px] px-1 py-0.5 rounded capitalize">
+                {type}
+              </span>
+            )) : (
+              <span className="bg-gray-200 text-black text-[6px] px-1 py-0.5 rounded">?</span>
+            )}
+          </div>
+
+          <img src={p.img} alt={p.name} className="w-16 h-16 object-contain" />
+        </div>
+      ))}
+
+      {/* MODAL DETTAGLIO */}
       {selected && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg max-w-md w-full relative">
+          <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-md relative">
             <button
-              className="absolute top-2 right-2 text-xl font-bold"
+              className="absolute top-2 right-2 text-red-500 font-bold"
               onClick={() => setSelected(null)}
             >
-              ✕
+              X
             </button>
-            <div className="text-2xl font-bold capitalize text-center">
-              {selected.name} - #{selected.id}
-            </div>
-            <img src={selected.img} alt={selected.name} className="w-48 h-48 mx-auto object-contain" />
-            <div className="flex gap-2 justify-center mt-2">
-              {selected.types.map((type) => (
-                <span
-                  key={type}
-                  className={`${typeColors[type] || "bg-gray-300"} text-white px-2 py-1 rounded text-xs capitalize`}
-                >
-                  {type}
-                </span>
-              ))}
-            </div>
-            <div className="mt-4">
-              <h3 className="font-bold">Statistiche:</h3>
-              {selected.stats.map((stat) => (
-                <div key={stat.name} className="flex justify-between text-sm">
-                  <span className="capitalize">{stat.name}</span>
-                  <span>{stat.value}</span>
+            {loading ? (
+              <div className="text-center">Caricamento...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold capitalize mb-2">{selected.name} - #{selected.id}</div>
+                <img src={selected.img} alt={selected.name} className="w-32 h-32 object-contain mx-auto mb-2" />
+                <div className="flex gap-2 justify-center mb-2">
+                  {selected.types.map((type) => (
+                    <span key={type} className="bg-gray-200 text-black px-2 py-1 rounded text-xs capitalize">{type}</span>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="mt-2 flex justify-between text-sm">
-              <div>Altezza: {selected.height / 10} m</div>
-              <div>Peso: {selected.weight / 10} kg</div>
-            </div>
-            <div className="mt-2">
-              <h3 className="font-bold">Abilità:</h3>
-              <div className="flex gap-2 flex-wrap">
-                {selected.abilities.map((a) => (
-                  <span key={a} className="bg-yellow-200 px-2 py-1 rounded text-xs capitalize">
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </div>
+                <div className="text-sm mb-2">
+                  Altezza: {selected.height / 10} m <br />
+                  Peso: {selected.weight / 10} kg
+                </div>
+                <div className="text-sm mb-2">
+                  <h4 className="font-bold">Abilità:</h4>
+                  {selected.abilities.join(", ")}
+                </div>
+                <div className="text-sm">
+                  <h4 className="font-bold">Stats:</h4>
+                  {selected.stats.map((s) => (
+                    <div key={s.name} className="flex justify-between">
+                      <span className="capitalize">{s.name}</span>
+                      <span>{s.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
