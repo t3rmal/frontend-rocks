@@ -1,3 +1,3 @@
 export const Detail = () => {
-  return null;
+  return <div className="bg-red-500 text-4xl font-bold">frontend rocks</div>;
 };
